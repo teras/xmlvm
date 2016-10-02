@@ -125,10 +125,18 @@ int main(int argc, char* argv[])
 </xsl:text>
     <xsl:if test="not(@isInterface = 'true')">
       <xsl:text>{
+// Variable declarations
 </xsl:text>
       <!-- Emit declarations for all non-static fields -->
       <xsl:for-each select="vm:field[not(@isStatic = 'true')]">
-        <xsl:text>@public </xsl:text>
+        <xsl:choose>
+          <xsl:when test="@isPrivate = 'true'">
+            <xsl:text>@private </xsl:text>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:text>@public </xsl:text>
+          </xsl:otherwise>
+        </xsl:choose>
         <xsl:call-template name="emitType">
           <xsl:with-param name="type" select="@type"/>
         </xsl:call-template>
@@ -139,14 +147,9 @@ int main(int argc, char* argv[])
         <xsl:text>;
 </xsl:text>
       </xsl:for-each>
-      <xsl:text>
-}
+      <xsl:text>}
 </xsl:text>
     </xsl:if>
-    <!-- Emit default constructor and initializer used for initializing member variables -->
-    <xsl:text>+ (void) initialize;
-- (id) init;
-</xsl:text>
     <!-- Emit declarations for getter and setter methods for all static fields -->
     <xsl:for-each select="vm:field[@isStatic = 'true']">
       <!-- Emit getter -->
@@ -310,21 +313,20 @@ int main(int argc, char* argv[])
 </xsl:text>
     
     <!-- Emit default Objective-C constructor used for member initialization -->
-    <xsl:text>- (id) init
+    <xsl:text>- (id) preInitJava
 {
-    if (self = [super init]) {
+    [super preInitJava];
 </xsl:text>
       <!-- Emit declarations for all non-static member fields -->
-      <xsl:for-each select="vm:field[not(@isStatic = 'true') and vm:isObjectRef(@type)]">
-        <xsl:text>        </xsl:text>
-        <xsl:value-of select="vm:fixname(@name)"/>
-        <xsl:text>_</xsl:text>
-        <xsl:value-of select="vm:fixname(@type)"/>
-        <xsl:text> = (id) JAVA_NULL;
+    <xsl:for-each select="vm:field[not(@isStatic = 'true') and vm:isObjectRef(@type)]">
+      <xsl:text>    </xsl:text>
+      <xsl:value-of select="vm:fixname(@name)"/>
+      <xsl:text>_</xsl:text>
+      <xsl:value-of select="vm:fixname(@type)"/>
+      <xsl:text> = (id) JAVA_NULL;
 </xsl:text>
-      </xsl:for-each>
-    <xsl:text>    }
-    return self;
+    </xsl:for-each>
+    <xsl:text>    return self;
 }
 
 </xsl:text>
@@ -432,8 +434,9 @@ int main(int argc, char* argv[])
           </xsl:when>
           <xsl:when test="@isNative = 'true'">
             <xsl:text>{
-    NSException* ex = [[NSException alloc] initWithName:@"Native method not implemented" reason:nil userInfo:nil];
-    @throw ex;
+// [NATIVE PLACEHOLDER] </xsl:text>
+            <xsl:call-template name="emitMethodSignature"/>
+            <xsl:text>
 }
 
 </xsl:text>
@@ -1549,9 +1552,7 @@ int main(int argc, char* argv[])
 
 <xsl:template match="jvm:instanceof">
   <xsl:text>    _op1.o = _stack[--_sp].o;
-    _stack[_sp++].i = _op1.o != JAVA_NULL &amp;&amp; 
-        ([_op1.o isKindOfClass: objc_getClass("</xsl:text><xsl:value-of select="vm:fixname(@type)"/><xsl:text>")] ||
-         [_op1.o conformsToProtocol: objc_getProtocol("</xsl:text><xsl:value-of select="vm:fixname(@type)"/><xsl:text>")]);
+    _stack[_sp++].i = isObjectInstanceOf(_op1.o, "</xsl:text><xsl:value-of select="vm:fixname(@type)"/><xsl:text>");
 </xsl:text>
 </xsl:template>
 
@@ -1622,9 +1623,16 @@ int main(int argc, char* argv[])
 <xsl:template name="emitMethodSignature">
   <xsl:value-of select="if (@isStatic = 'true') then '+' else '-'"/>
   <xsl:text> (</xsl:text>
-  <xsl:call-template name="emitType">
-    <xsl:with-param name="type" select="vm:signature/vm:return/@type"/>
-  </xsl:call-template>
+  <xsl:choose>
+    <xsl:when test="@name = '&lt;init&gt;'">
+      <xsl:text>instancetype</xsl:text>
+    </xsl:when>
+    <xsl:otherwise>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="vm:signature/vm:return/@type"/>
+      </xsl:call-template>
+    </xsl:otherwise>
+  </xsl:choose>
   <xsl:text>) </xsl:text>
   <xsl:call-template name="emitMethodName">
     <xsl:with-param name="name" select="@name"/>
@@ -2083,7 +2091,8 @@ int main(int argc, char* argv[])
 </xsl:template>
 
 <xsl:template match="vm:source-position">
-  <!-- TODO -->
+  <xsl:text>// </xsl:text><xsl:value-of select="@file"/><xsl:text>:</xsl:text><xsl:value-of select="@line"/><xsl:text>
+</xsl:text>
 </xsl:template>
 
 
@@ -2147,6 +2156,11 @@ int main(int argc, char* argv[])
         </xsl:if>
       </xsl:otherwise>
     </xsl:choose>
+  </xsl:if>
+  <xsl:if test="@method = '&lt;init&gt;'">
+    <xsl:text>_r</xsl:text>
+    <xsl:value-of select="@register"/>
+    <xsl:text>.o = </xsl:text>
   </xsl:if>
   <xsl:text>[((</xsl:text>
   
@@ -2732,7 +2746,11 @@ int main(int argc, char* argv[])
     <xsl:text>    [_ex release];
 </xsl:text>
   </xsl:if>
-  <xsl:text>    return;
+  <xsl:text>    return</xsl:text>
+  <xsl:if test="../../@name = '&lt;init&gt;'">
+    <xsl:text> self</xsl:text>
+  </xsl:if>
+  <xsl:text>;
 </xsl:text>
 </xsl:template>
 
@@ -2758,7 +2776,7 @@ int main(int argc, char* argv[])
   <xsl:value-of select="@vx" />
   <xsl:text>.o = [[</xsl:text>
   <xsl:value-of select="vm:fixname(@value)" />
-  <xsl:text> alloc] init];
+  <xsl:text> alloc] preInitJava];
 </xsl:text>
 </xsl:template>
 
@@ -2909,7 +2927,7 @@ int main(int argc, char* argv[])
 
 
 
-<xsl:template match="dex:sget|dex:sget-wide|dex:sget-boolean|dex:sget-object">
+<xsl:template match="dex:sget|dex:sget-wide|dex:sget-boolean|dex:sget-object|dex:sget-byte|dex:sget-short|dex:sget-char">
   <xsl:text>    _r</xsl:text>
   <xsl:value-of select="@vx"/>
   <xsl:call-template name="emitTypedAccess">
@@ -2932,7 +2950,7 @@ int main(int argc, char* argv[])
 </xsl:text>
 </xsl:template>
 
-<xsl:template match="dex:sput|dex:sput-wide|dex:sput-boolean|dex:sput-object">
+<xsl:template match="dex:sput|dex:sput-wide|dex:sput-boolean|dex:sput-char|dex:sput-byte|dex:sput-short|dex:sput-object">
   <xsl:text>    [</xsl:text>
   <xsl:value-of select="vm:fixname(@class-type)"/>
   <xsl:text> _PUT_</xsl:text>
@@ -3687,17 +3705,11 @@ int main(int argc, char* argv[])
 <xsl:template match="dex:instance-of">
   <xsl:text>    _r</xsl:text>
   <xsl:value-of select="@vx"/>
-  <xsl:text>.i = (_r</xsl:text>
+  <xsl:text>.i = isObjectInstanceOf(_r</xsl:text>
   <xsl:value-of select="@vy"/>
-  <xsl:text>.o != JAVA_NULL &amp;&amp; 
-        ([_r</xsl:text>
-  <xsl:value-of select="@vy"/>
-  <xsl:text>.o isKindOfClass: objc_getClass("</xsl:text>
-  <xsl:value-of select="vm:fixname(@value)"/><xsl:text>")] ||
-         [_r</xsl:text>
-  <xsl:value-of select="@vy"/>
-  <xsl:text>.o conformsToProtocol: objc_getProtocol("</xsl:text>
-  <xsl:value-of select="vm:fixname(@value)"/><xsl:text>")])) ? 1 : 0;
+  <xsl:text>.o, "</xsl:text>
+  <xsl:value-of select="vm:fixname(@value)"/>
+  <xsl:text>");
 </xsl:text>
 </xsl:template>
 
