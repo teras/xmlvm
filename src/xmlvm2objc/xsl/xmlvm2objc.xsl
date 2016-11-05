@@ -350,14 +350,7 @@ int main(int argc, char* argv[])
 	  <xsl:text> release];
 </xsl:text>
 	</xsl:for-each>
-	<xsl:text>    if (strcmp(object_getClassName(self), "</xsl:text>
-    	<xsl:value-of select="vm:fixname(@package)"/>
-    	<xsl:text>_</xsl:text>
-    	<xsl:value-of select="vm:fixname(@name)"/>
-    	<xsl:text>") == 0) {
-        [self dealloc__];
-    }
-    [super dealloc];
+    <xsl:text>    [super dealloc];
 }
 
 </xsl:text>
