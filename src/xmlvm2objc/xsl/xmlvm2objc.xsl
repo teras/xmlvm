@@ -3752,7 +3752,7 @@ int main(int argc, char* argv[])
    to the output stream.
 -->
 <xsl:template match="*">
-  <xsl:text>      ERROR("</xsl:text>
+  <xsl:text>      xmlvm_error(@"</xsl:text>
   <xsl:value-of select="name()"/>
     <xsl:text>");
 </xsl:text>
