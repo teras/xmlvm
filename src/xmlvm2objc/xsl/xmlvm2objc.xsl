@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
 	xmlvm_init();
 	XMLVMArray * args;
 	if (argc==0) {
-		args=nil;
+		args=JAVA_NULL;
 	} else {
 		args= [XMLVMArray createSingleDimensionWithType:0 andSize:argc];
 		for (int i = 0; i &lt; argc; i++) {
