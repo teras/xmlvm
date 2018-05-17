@@ -30,6 +30,7 @@
 
 <xsl:param name="pass">emitHeader</xsl:param>
 <xsl:param name="header">default.h</xsl:param>
+<xsl:param name="safeinheritance">false</xsl:param>
 
 <xsl:output method="text" indent="no"/>
 
@@ -128,27 +129,39 @@ int main(int argc, char* argv[])
 // Variable declarations
 </xsl:text>
       <!-- Emit declarations for all non-static fields -->
-      <xsl:for-each select="vm:field[not(@isStatic = 'true')]">
-        <xsl:choose>
-          <xsl:when test="@isPrivate = 'true'">
-            <xsl:text>@private </xsl:text>
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:text>@public </xsl:text>
-          </xsl:otherwise>
-        </xsl:choose>
-        <xsl:call-template name="emitType">
-          <xsl:with-param name="type" select="@type"/>
-        </xsl:call-template>
-        <xsl:text> </xsl:text>
-        <xsl:value-of select="vm:fixname(@name)"/>
-        <xsl:text>_</xsl:text>
-        <xsl:value-of select="vm:fixname(@type)"/>
-        <xsl:text>;
+        <xsl:for-each select="vm:field[not(@isStatic = 'true')]">
+            <xsl:choose>
+                <xsl:when test="@isPrivate = 'true'">
+                    <xsl:text>@private </xsl:text>
+                </xsl:when>
+                <xsl:otherwise>
+                    <xsl:text>@public </xsl:text>
+                </xsl:otherwise>
+            </xsl:choose>
+            <xsl:call-template name="emitType">
+                <xsl:with-param name="type" select="@type"/>
+            </xsl:call-template>
+            <xsl:text> </xsl:text>
+            <xsl:value-of select="vm:fixname(@name)"/>
+            <xsl:text>_</xsl:text>
+            <xsl:value-of select="vm:fixname(@type)"/>
+            <xsl:text>;
 </xsl:text>
-      </xsl:for-each>
-      <xsl:text>}
+        </xsl:for-each>
+        <xsl:text>}
 </xsl:text>
+<!-- Create properties coresponding to all non static fields -->
+        <xsl:for-each select="vm:field[not(@isStatic = 'true')]">
+            <xsl:text>@property </xsl:text>
+            <xsl:call-template name="emitType">
+                <xsl:with-param name="type" select="@type"/>
+            </xsl:call-template>
+            <xsl:text> </xsl:text>
+            <xsl:value-of select="vm:fixname(@name)"/>
+            <xsl:text>_field;
+</xsl:text>
+        </xsl:for-each>
+
     </xsl:if>
     <!-- Emit declarations for getter and setter methods for all static fields -->
     <xsl:for-each select="vm:field[@isStatic = 'true']">
@@ -412,7 +425,18 @@ int main(int argc, char* argv[])
 </xsl:text>
 </xsl:if>
     </xsl:for-each>
-    
+<!-- Emit Synthesize to bind member variables with properties -->
+    <xsl:for-each select="vm:field[not(@isStatic = 'true')]">
+    <xsl:text>@synthesize </xsl:text>
+    <xsl:value-of select="vm:fixname(@name)"/>
+    <xsl:text>_field = </xsl:text>
+    <xsl:value-of select="vm:fixname(@name)"/>
+    <xsl:text>_</xsl:text>
+    <xsl:value-of select="vm:fixname(@type)"/>
+    <xsl:text>;
+
+</xsl:text>
+    </xsl:for-each>
     <xsl:for-each select="vm:method">
       <xsl:if test="not(vm:isDuplicateMethod(.))">
         <xsl:call-template name="emitMethodSignature"/>
@@ -2773,26 +2797,47 @@ int main(int argc, char* argv[])
 </xsl:text>
 </xsl:template>
 
-
+<!-- The macros to call the actual methods are :
+#define MEMBER_GET(OBJ,TYPE,CLASS,SELECTOR)     ((TYPE (*)(id, SEL))[[CLASS class] instanceMethodForSelector: @selector(SELECTOR)])(OBJ, @selector(SELECTOR))
+#define MEMBER_SET(OBJ,TYPE,CLASS,SELECTOR,VALUE)     ((void(*)(id, SEL, TYPE))[[CLASS class] instanceMethodForSelector: @selector(SELECTOR)])(OBJ, @selector(SELECTOR), (VALUE))
+ -->
 <xsl:template match="dex:iget|dex:iget-wide|dex:iget-boolean|dex:iget-byte|dex:iget-short|dex:iget-char">
   <xsl:variable name="m">
-    <xsl:call-template name="emitTypedAccess">
-      <xsl:with-param name="type" select="@member-type"/>
-    </xsl:call-template>
+  <xsl:call-template name="emitTypedAccess">
+    <xsl:with-param name="type" select="@member-type"/>
+  </xsl:call-template>
   </xsl:variable>
   <xsl:text>    _r</xsl:text>
   <xsl:value-of select="@vx"/>
   <xsl:value-of select="$m"/>
-  <xsl:text> = ((</xsl:text>
-  <xsl:call-template name="emitType">
-    <xsl:with-param name="type" select="@class-type"/>
-  </xsl:call-template>
-  <xsl:text>) _r</xsl:text>
-  <xsl:value-of select="@vy"/>
-  <xsl:text>.o)-></xsl:text>
-  <xsl:value-of select="vm:fixname(@member-name)"/>
-  <xsl:text>_</xsl:text>
-  <xsl:value-of select="vm:fixname(@member-type)"/>
+  <xsl:text> = </xsl:text>
+  <xsl:choose>
+    <xsl:when test="$safeinheritance = 'true'">
+      <xsl:text>MEMBER_GET(_r</xsl:text>
+      <xsl:value-of select="@vy"/>
+      <xsl:text>.o, </xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@member-type"/>
+      </xsl:call-template>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@class-type)"/>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)"/>
+      <xsl:text>_field)</xsl:text>
+    </xsl:when>
+    <xsl:otherwise>
+      <xsl:text>((</xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@class-type"/>
+      </xsl:call-template>
+      <xsl:text>) _r</xsl:text>
+      <xsl:value-of select="@vy"/>
+      <xsl:text>.o)-></xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)"/>
+      <xsl:text>_</xsl:text>
+      <xsl:value-of select="vm:fixname(@member-type)"/>
+    </xsl:otherwise>
+  </xsl:choose>
   <xsl:text>;
 </xsl:text>
 </xsl:template>
@@ -2807,16 +2852,34 @@ int main(int argc, char* argv[])
   <xsl:text>    _r</xsl:text>
   <xsl:value-of select="@vx" />
   <xsl:value-of select="$m" />
-  <xsl:text> = ((</xsl:text>
-  <xsl:call-template name="emitType">
-    <xsl:with-param name="type" select="@class-type" />
-  </xsl:call-template>
-  <xsl:text>) _r</xsl:text>
-  <xsl:value-of select="@vy" />
-  <xsl:text>.o)-></xsl:text>
-  <xsl:value-of select="vm:fixname(@member-name)" />
-  <xsl:text>_</xsl:text>
-  <xsl:value-of select="vm:fixname(@member-type)" />
+  <xsl:text> = </xsl:text>
+  <xsl:choose>
+    <xsl:when test="$safeinheritance = 'true'">
+      <xsl:text>MEMBER_GET(_r</xsl:text>
+      <xsl:value-of select="@vy"/>
+      <xsl:text>.o, </xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@member-type"/>
+      </xsl:call-template>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@class-type)"/>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)"/>
+      <xsl:text>_field)</xsl:text>
+    </xsl:when>
+    <xsl:otherwise>
+      <xsl:text>((</xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@class-type" />
+      </xsl:call-template>
+      <xsl:text>) _r</xsl:text>
+      <xsl:value-of select="@vy" />
+      <xsl:text>.o)-></xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)" />
+      <xsl:text>_</xsl:text>
+      <xsl:value-of select="vm:fixname(@member-type)"/>
+    </xsl:otherwise>
+  </xsl:choose>
   <xsl:text>;
 </xsl:text>
 </xsl:template>
@@ -2828,19 +2891,43 @@ int main(int argc, char* argv[])
       <xsl:with-param name="type" select="@member-type"/>
     </xsl:call-template>
   </xsl:variable>
-  <xsl:text>    ((</xsl:text>
-  <xsl:call-template name="emitType">
-    <xsl:with-param name="type" select="@class-type"/>
-  </xsl:call-template>
-  <xsl:text>) _r</xsl:text>
-  <xsl:value-of select="@vy"/>
-  <xsl:text>.o)-></xsl:text>
-  <xsl:value-of select="vm:fixname(@member-name)"/>
-  <xsl:text>_</xsl:text>
-  <xsl:value-of select="vm:fixname(@member-type)"/>
-  <xsl:text> = _r</xsl:text>
-  <xsl:value-of select="@vx"/>
-  <xsl:value-of select="$m"/>
+  <xsl:text>    </xsl:text>
+  <xsl:choose>
+    <xsl:when test="$safeinheritance = 'true'">
+      <xsl:text>MEMBER_SET(_r</xsl:text>
+      <xsl:value-of select="@vy"/>
+      <xsl:text>.o, </xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@member-type"/>
+      </xsl:call-template>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@class-type)"/>
+      <xsl:text>, set</xsl:text>
+      <xsl:call-template name="CapitalizeFirst">
+        <xsl:with-param name="string" select="vm:fixname(@member-name)"/>
+      </xsl:call-template>
+      <xsl:text>_field:, </xsl:text>
+      <xsl:text>_r</xsl:text>
+      <xsl:value-of select="@vx"/>
+      <xsl:value-of select="$m"/>
+      <xsl:text>)</xsl:text>
+    </xsl:when>
+    <xsl:otherwise>    
+      <xsl:text>((</xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@class-type"/>
+      </xsl:call-template>
+      <xsl:text>) _r</xsl:text>
+      <xsl:value-of select="@vy"/>
+      <xsl:text>.o)-></xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)"/>
+      <xsl:text>_</xsl:text>
+      <xsl:value-of select="vm:fixname(@member-type)"/>
+      <xsl:text> = _r</xsl:text>
+      <xsl:value-of select="@vx"/>
+      <xsl:value-of select="$m"/>
+    </xsl:otherwise>
+  </xsl:choose>
   <xsl:text>;
 </xsl:text>
 </xsl:template>
@@ -2881,16 +2968,34 @@ int main(int argc, char* argv[])
         <xsl:with-param name="type" select="@member-type" />
       </xsl:call-template>
     </xsl:variable>
-  <xsl:text>    [((</xsl:text>
-  <xsl:call-template name="emitType">
-    <xsl:with-param name="type" select="@class-type" />
-  </xsl:call-template>
-  <xsl:text>) _r</xsl:text>
-  <xsl:value-of select="@vy" />
-  <xsl:text>.o)-></xsl:text>
-  <xsl:value-of select="vm:fixname(@member-name)" />
-  <xsl:text>_</xsl:text>
-  <xsl:value-of select="vm:fixname(@member-type)" />
+  <xsl:text>    [</xsl:text>
+  <xsl:choose>
+    <xsl:when test="$safeinheritance = 'true'">
+      <xsl:text>MEMBER_GET(_r</xsl:text>
+      <xsl:value-of select="@vy"/>
+      <xsl:text>.o, </xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@member-type"/>
+      </xsl:call-template>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@class-type)"/>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)"/>
+      <xsl:text>_field)</xsl:text>
+    </xsl:when>
+    <xsl:otherwise>
+      <xsl:text>((</xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@class-type" />
+      </xsl:call-template>
+      <xsl:text>) _r</xsl:text>
+      <xsl:value-of select="@vy" />
+      <xsl:text>.o)-></xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)" />
+      <xsl:text>_</xsl:text>
+      <xsl:value-of select="vm:fixname(@member-type)"/>
+    </xsl:otherwise>
+  </xsl:choose>
   <xsl:text> release];
 </xsl:text>
 </xsl:template>
@@ -2901,19 +3006,43 @@ int main(int argc, char* argv[])
       <xsl:with-param name="type" select="@member-type" />
     </xsl:call-template>
   </xsl:variable>
-  <xsl:text>    ((</xsl:text>
-  <xsl:call-template name="emitType">
-    <xsl:with-param name="type" select="@class-type" />
-  </xsl:call-template>
-  <xsl:text>) _r</xsl:text>
-  <xsl:value-of select="@vy" />
-  <xsl:text>.o)-></xsl:text>
-  <xsl:value-of select="vm:fixname(@member-name)" />
-  <xsl:text>_</xsl:text>
-  <xsl:value-of select="vm:fixname(@member-type)" />
-  <xsl:text> = _r</xsl:text>
-  <xsl:value-of select="@vx" />
-  <xsl:value-of select="$m" />
+  <xsl:text>    </xsl:text>
+  <xsl:choose>
+    <xsl:when test="$safeinheritance = 'true'">
+      <xsl:text>MEMBER_SET(_r</xsl:text>
+      <xsl:value-of select="@vy"/>
+      <xsl:text>.o, </xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@member-type"/>
+      </xsl:call-template>
+      <xsl:text>, </xsl:text>
+      <xsl:value-of select="vm:fixname(@class-type)"/>
+      <xsl:text>, set</xsl:text>
+      <xsl:call-template name="CapitalizeFirst">
+        <xsl:with-param name="string" select="vm:fixname(@member-name)"/>
+      </xsl:call-template>
+      <xsl:text>_field:, </xsl:text>
+      <xsl:text>_r</xsl:text>
+      <xsl:value-of select="@vx"/>
+      <xsl:value-of select="$m"/>
+      <xsl:text>)</xsl:text>
+    </xsl:when>
+    <xsl:otherwise>    
+      <xsl:text>((</xsl:text>
+      <xsl:call-template name="emitType">
+        <xsl:with-param name="type" select="@class-type" />
+      </xsl:call-template>
+      <xsl:text>) _r</xsl:text>
+      <xsl:value-of select="@vy" />
+      <xsl:text>.o)-></xsl:text>
+      <xsl:value-of select="vm:fixname(@member-name)" />
+      <xsl:text>_</xsl:text>
+      <xsl:value-of select="vm:fixname(@member-type)"/>
+      <xsl:text> = _r</xsl:text>
+      <xsl:value-of select="@vx"/>
+      <xsl:value-of select="$m"/>
+    </xsl:otherwise>
+  </xsl:choose>
   <xsl:text>;
 </xsl:text>
 </xsl:template>
@@ -3759,5 +3888,13 @@ int main(int argc, char* argv[])
   <xsl:message select="."/>
 </xsl:template>
 
+
+<xsl:template name="CapitalizeFirst">
+    <xsl:param name="string"/>
+    <xsl:sequence select=
+    "concat(upper-case(substring($string,1,1)),
+            substring($string, 2))
+    "/>
+</xsl:template>
 
 </xsl:stylesheet>
