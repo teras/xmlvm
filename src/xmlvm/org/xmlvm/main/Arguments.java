@@ -44,6 +44,7 @@ public class Arguments {
     public static final String    ARG_OUT                          = "--out=";
     public static final String    ARG_TARGET                       = "--target=";
     public static final String    ARG_RESOURCE                     = "--resource=";
+    public static final String    ARG_SAFE_INHERITANCE             = "--safe-inheritance";
     public static final String    ARG_LIB                          = "--lib=";
     public static final String    ARG_DEPS                         = "--deps=";
     public static final String    ARG_APP_NAME                     = "--app-name=";
@@ -84,6 +85,7 @@ public class Arguments {
     private List<String>          option_in                        = new ArrayList<String>();
     private String                option_out                       = null;
     private Targets               option_target                    = Targets.NONE;
+    private boolean               option_safe_inheritance          = false;
     private boolean               option_gen_native_skeletons      = false;
     private Set<String>           option_resource                  = new HashSet<String>();
     private Set<String>           option_lib                       = new HashSet<String>();
@@ -112,6 +114,7 @@ public class Arguments {
             "Usage: ",
             "xmlvm [--in=<path> [--out=<dir>]]", "      [--deps=<dep1,dep2,...>]",
             "      [--target=[xmlvm|dexmlvm|jvm|clr|dfa|class|exe|dex|js|java|c|python|objc|iphone|qooxdoo|vtable|webos|csharp]]",
+            "      [--safe-inheritance",
             "      [--skeleton=<type>]", "      [--lib=<name>", "      [--app-name=<app-name>]",
             "      [--resource=<path>]", "      [--qx-main=<main-class> [--qx-debug]]",
             "      [--debug=[none|error|warning|all]]", "      [--version] [--help]" };
@@ -143,6 +146,8 @@ public class Arguments {
             "    vtable           Vtable calculation (pre-step for e.g. C generation)",
             "    webos            WebOS JavaScript Project",
             "    csharp           C# source code",
+            "",
+            " --safe-inheritance  generate objc output otimized to safely support java inheritance ",
             "",
             " --deps=<dep1, ...>  Additional dependencies such as libraries your app is depending on.",
             "                     Only the classes your app is depending on are actually cross-compiled.",
@@ -290,6 +295,8 @@ public class Arguments {
                 if (option_target.affinity != Targets.Affinity.TARGET)
                     parseError("Not valid target: " + target
                             + ". Consider using --skeleton argument.");
+            } else if (arg.startsWith(ARG_SAFE_INHERITANCE)) {
+                option_safe_inheritance = true;
             } else if (arg.startsWith(ARG_RESOURCE)) {
                 parseListArgument(arg.substring(ARG_RESOURCE.length()), option_resource,
                         File.pathSeparator);
@@ -408,7 +415,7 @@ public class Arguments {
 
         if (option_target == Targets.NONE)
             option_target = Targets.XMLVM;
-
+        
         if (option_lib.contains("android")) {
             option_lib.remove("android");
             if (option_target == Targets.IPHONE) {
@@ -512,6 +519,10 @@ public class Arguments {
         return option_target;
     }
 
+    public boolean get_option_safe_inheritance() {
+        return option_safe_inheritance;
+    }
+    
     public boolean option_gen_native_skeletons() {
         return option_gen_native_skeletons;
     }

@@ -98,8 +98,11 @@ public class ObjectiveCOutputProcess extends XmlvmProcessImpl {
         for (String i : getTypesForHeader(doc)) {
             headerBuffer.append("@class " + i + ";\n");
         }
+
+        String safeinheritance = Boolean.toString(arguments.get_option_safe_inheritance());
+
         OutputFile headerFile = XsltRunner.runXSLT("xmlvm2objc.xsl", doc, new String[][] {
-                { "pass", "emitHeader" }, { "header", headerFileName } });
+                { "pass", "emitHeader" }, { "header", headerFileName }, { "safeinheritance", safeinheritance } });
         headerFile.setData(headerBuffer.toString() + headerFile.getDataAsString());
         headerFile.setFileName(headerFileName);
 
@@ -112,7 +115,7 @@ public class ObjectiveCOutputProcess extends XmlvmProcessImpl {
         }
 
         OutputFile mFile = XsltRunner.runXSLT("xmlvm2objc.xsl", doc, new String[][] {
-                { "pass", "emitImplementation" }, { "header", headerFileName } });
+                { "pass", "emitImplementation" }, { "header", headerFileName }, { "safeinheritance", safeinheritance } });
         mFile.setData(mBuffer.toString() + mFile.getDataAsString());
         mFile.setFileName(mFileName);
 
