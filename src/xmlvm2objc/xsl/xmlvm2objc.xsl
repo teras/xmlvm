@@ -3466,7 +3466,9 @@ int main(int argc, char* argv[])
   <xsl:value-of select="@vx"/>
   <xsl:choose>
     <xsl:when test="vm:isObjectRef(@vx-type)">
-      <xsl:text>.o == JAVA_NULL</xsl:text>
+      <xsl:text>.o == JAVA_NULL || _r</xsl:text>
+      <xsl:value-of select="@vx"/>
+      <xsl:text>.o == nil</xsl:text>
     </xsl:when>
     <xsl:otherwise>
       <xsl:call-template name="emitTypedAccess">
@@ -3487,7 +3489,9 @@ int main(int argc, char* argv[])
   <xsl:value-of select="@vx"/>
   <xsl:choose>
     <xsl:when test="vm:isObjectRef(@vx-type)">
-      <xsl:text>.o != JAVA_NULL</xsl:text>
+      <xsl:text>.o != JAVA_NULL &amp;&amp; _r</xsl:text>
+      <xsl:value-of select="@vx"/>
+      <xsl:text>.o != nil</xsl:text>
     </xsl:when>
     <xsl:otherwise>
       <xsl:call-template name="emitTypedAccess">
